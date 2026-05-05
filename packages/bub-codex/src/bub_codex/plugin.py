@@ -8,6 +8,8 @@ import time
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, cast
 
+from loguru import logger
+
 from bub import hookimpl
 from bub.types import State
 from pydantic import Field
@@ -225,5 +227,12 @@ async def save_state(session_id: str, state: State, message: Any, model_output: 
     tape = agent.tapes.session_tape(session_id, workspace)
     handoff_name = signal.get("name", "codex-handoff")
     handoff_state = {k: v for k, v in signal.items() if k != "name" and v}
-    await agent.tapes.handoff(tape.name, name=handoff_name, state=handoff_state)
+    logger.info("save_state: performing handoff tape={} name={} state={}", tape.name, handoff_name, handoff_state)
+    try:
+        await agent.tapes.handoff(tape.name, name=handoff_name, state=handoff_state)
+        logger.info("save_state: handoff completed successfully")
+    except Exception as exc:
+        logger.error("save_state: handoff failed: {}", exc)
+        raise
     _save_session_data(session_id, {"thread_id": None, "anchor_count": 0}, state)
+    logger.info("save_state: session data cleared")
