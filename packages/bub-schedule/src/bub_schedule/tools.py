@@ -73,8 +73,9 @@ def schedule_add(params: ScheduleAddInput, context: ToolContext) -> str:
         raise RuntimeError(f"job id already exists: {job_id}") from exc
 
     next_run = "-"
-    if isinstance(job.next_run_time, datetime):
-        next_run = job.next_run_time.isoformat()
+    next_run_time = getattr(job, "next_run_time", None)
+    if isinstance(next_run_time, datetime):
+        next_run = next_run_time.isoformat()
     return f"scheduled: {job.id} next={next_run}"
 
 
@@ -97,8 +98,9 @@ def schedule_list(context: ToolContext) -> str:
     rows: list[str] = []
     for job in jobs:
         next_run = "-"
-        if isinstance(job.next_run_time, datetime):
-            next_run = job.next_run_time.isoformat()
+        next_run_time = getattr(job, "next_run_time", None)
+        if isinstance(next_run_time, datetime):
+            next_run = next_run_time.isoformat()
         message = str(job.kwargs.get("message", ""))
         job_session = job.kwargs.get("session_id")
         if job_session and job_session != context.state.get("session_id", ""):
@@ -134,8 +136,9 @@ async def schedule_trigger(job_id: str, context: ToolContext) -> str:
             await result
         
         next_run = "-"
-        if isinstance(job.next_run_time, datetime):
-            next_run = job.next_run_time.isoformat()
+        next_run_time = getattr(job, "next_run_time", None)
+        if isinstance(next_run_time, datetime):
+            next_run = next_run_time.isoformat()
         
         return f"triggered: {job_id} (next scheduled run: {next_run})"
     except JobLookupError as exc:
