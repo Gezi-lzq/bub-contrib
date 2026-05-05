@@ -55,6 +55,21 @@ def _save_session_data(session_id: str, data: dict[str, Any], state: State) -> N
         json.dump(threads, f, indent=2)
 
 
+def _load_handoff_signal(signal_path: Path) -> dict[str, Any] | None:
+    try:
+        with signal_path.open() as f:
+            signal = json.load(f)
+    except FileNotFoundError:
+        return None
+    except (json.JSONDecodeError, OSError):
+        signal_path.unlink(missing_ok=True)
+        return None
+    if not isinstance(signal, dict):
+        signal_path.unlink(missing_ok=True)
+        return None
+    return signal
+
+
 def workspace_from_state(state: State) -> Path:
     raw = state.get("_runtime_workspace")
     if isinstance(raw, str) and raw.strip():
@@ -98,6 +113,26 @@ async def _run_internal_command(prompt: str, session_id: str, state: State) -> s
     if agent is None:
         return None
     return await agent.run(session_id=session_id, prompt=prompt, state=state)
+
+
+async def _apply_handoff_signal(
+    session_id: str, state: State, workspace: Path, agent: Agent | None
+) -> bool:
+    signal_path = workspace / HANDOFF_SIGNAL_FILE
+    signal = _load_handoff_signal(signal_path)
+    if signal is None:
+        return False
+
+    signal_path.unlink(missing_ok=True)
+    if agent is None:
+        return False
+
+    tape = agent.tapes.session_tape(session_id, workspace)
+    handoff_name = signal.get("name", "codex-handoff")
+    handoff_state = {k: v for k, v in signal.items() if k != "name" and v}
+    await agent.tapes.handoff(tape.name, name=handoff_name, state=handoff_state)
+    _save_session_data(session_id, {"thread_id": None, "anchor_count": 0}, state)
+    return True
 
 
 @hookimpl
@@ -181,6 +216,10 @@ async def run_model(prompt: str, session_id: str, state: State) -> str:
                     "stderr": stderr_text[:500],
                 })
 
+    handoff_applied = await _apply_handoff_signal(session_id, state, workspace, agent)
+    if handoff_applied:
+        new_thread_id = None
+
     if agent is not None and tape_name:
         info = await agent.tapes.info(tape_name)
         _save_session_data(session_id, {
@@ -204,26 +243,5 @@ async def run_model(prompt: str, session_id: str, state: State) -> str:
 @hookimpl
 async def save_state(session_id: str, state: State, message: Any, model_output: str) -> None:
     workspace = workspace_from_state(state)
-    signal_path = workspace / HANDOFF_SIGNAL_FILE
-    if not signal_path.exists():
-        return
-
     agent = _runtime_agent_from_state(state)
-    if agent is None:
-        signal_path.unlink(missing_ok=True)
-        return
-
-    try:
-        with signal_path.open() as f:
-            signal = json.load(f)
-    except (json.JSONDecodeError, OSError):
-        signal_path.unlink(missing_ok=True)
-        return
-
-    signal_path.unlink(missing_ok=True)
-
-    tape = agent.tapes.session_tape(session_id, workspace)
-    handoff_name = signal.get("name", "codex-handoff")
-    handoff_state = {k: v for k, v in signal.items() if k != "name" and v}
-    await agent.tapes.handoff(tape.name, name=handoff_name, state=handoff_state)
-    _save_session_data(session_id, {"thread_id": None, "anchor_count": 0}, state)
+    await _apply_handoff_signal(session_id, state, workspace, agent)
