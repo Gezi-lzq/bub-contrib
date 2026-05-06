@@ -1,11 +1,11 @@
 ---
 name: http-bridge
 description: >
-  Local HTTP bridge for posting messages into bub sessions from external processes.
-  Use when Bub needs to: (1) Instruct an external harness or subprocess how to call back into the framework,
-  (2) Send a message to a different bub session (cross-session messaging),
-  (3) Provide IPC instructions to spawned child processes (e.g. codex CLI, scripts) so they can
-  leverage framework tools like schedule, tape, or trigger agent processing.
+  Local HTTP endpoint that accepts POST requests to inject messages into any bub session.
+  Use when Bub needs to: (1) Tell an external process (e.g. codex CLI, scripts) how to send results
+  back into the current session via HTTP callback, (2) Post a message into a different bub session
+  (cross-session messaging), (3) Trigger agent processing or command execution from outside the
+  framework.
 ---
 
 # HTTP Bridge
