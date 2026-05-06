@@ -1,11 +1,10 @@
 ---
 name: http-bridge
 description: >
-  Local HTTP endpoint that accepts POST requests to inject messages into any bub session.
-  Use when Bub needs to: (1) Tell an external process (e.g. codex CLI, scripts) how to send results
-  back into the current session via HTTP callback, (2) Post a message into a different bub session
-  (cross-session messaging), (3) Trigger agent processing or command execution from outside the
-  framework.
+  Inject messages into any bub session from external processes.
+  Use when Bub needs to: (1) Give an external process a way to send results back into the current session,
+  (2) Post a message into a different bub session (cross-session messaging),
+  (3) Trigger agent processing or command execution from outside.
 ---
 
 # HTTP Bridge
