@@ -1,0 +1,80 @@
+---
+name: http-bridge
+description: >
+  Local HTTP bridge for posting messages into bub sessions from external processes.
+  Use when Bub needs to: (1) Instruct an external harness or subprocess how to call back into the framework,
+  (2) Send a message to a different bub session (cross-session messaging),
+  (3) Provide IPC instructions to spawned child processes (e.g. codex CLI, scripts) so they can
+  leverage framework tools like schedule, tape, or trigger agent processing.
+---
+
+# HTTP Bridge
+
+Agent-facing guide for using the bub-http-bridge channel.
+
+## When to Use
+
+- Spawning an external process that needs to report results back or invoke framework capabilities
+- Cross-session communication (e.g. posting from a telegram session into a feishu session)
+- Providing callback instructions to child processes that cannot directly access bub tools
+
+## Endpoint
+
+```
+POST http://127.0.0.1:9800/message
+Content-Type: application/json
+```
+
+Default port is `9800`. Override via `BUB_HTTP_BRIDGE_PORT` env var.
+
+## Request Format
+
+```json
+{
+  "session_id": "<channel>:<chat_id>",
+  "content": "<message>"
+}
+```
+
+- `session_id`: Target session. Format is `channel:chat_id` (e.g. `telegram:5779521985`, `feishu:xxx`).
+- `content`: Message body. Prefix with `,` to execute as a bash command in that session. Plain text triggers normal agent processing.
+
+## Response
+
+`202 Accepted` — fire-and-forget. The message is queued for processing.
+
+## Usage Patterns
+
+### Pattern 1: External process callback
+
+When spawning a subprocess that should report back:
+
+```bash
+# Tell the child process how to call back
+export BUB_CALLBACK="curl -s -X POST http://127.0.0.1:9800/message \
+  -H 'Content-Type: application/json' \
+  -d '{\"session_id\": \"telegram:5779521985\", \"content\": \"task done: result here\"}'"
+```
+
+### Pattern 2: Execute a framework command from outside
+
+```bash
+curl -s -X POST http://127.0.0.1:9800/message \
+  -H 'Content-Type: application/json' \
+  -d '{"session_id": "telegram:5779521985", "content": ",echo hello from external"}'
+```
+
+### Pattern 3: Cross-session messaging
+
+```bash
+curl -s -X POST http://127.0.0.1:9800/message \
+  -H 'Content-Type: application/json' \
+  -d '{"session_id": "feishu:group123", "content": "deployment complete"}'
+```
+
+## Important Notes
+
+- The bridge only listens on localhost — not exposed to the network.
+- Messages posted via bridge go through the same processing pipeline as any channel message.
+- The `,` command prefix convention works the same as in normal sessions.
+- The target session must belong to an enabled channel for output routing to work.
