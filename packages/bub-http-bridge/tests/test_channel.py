@@ -25,7 +25,7 @@ async def test_post_message_success(channel, mock_handler):
     async with TestClient(TestServer(channel._app)) as client:
         resp = await client.post(
             "/message",
-            json={"session_id": "telegram:12345", "content": ",echo hello"},
+            json={"session_id": "telegram:12345", "content": ",echo hello", "source": "codex"},
         )
         assert resp.status == 202
         data = await resp.json()
@@ -35,8 +35,10 @@ async def test_post_message_success(channel, mock_handler):
         msg = mock_handler.call_args[0][0]
         assert msg.session_id == "telegram:12345"
         assert msg.content == ",echo hello"
-        assert msg.channel == "telegram"
+        assert msg.channel == "http-bridge"
+        assert msg.output_channel == "telegram"
         assert msg.chat_id == "12345"
+        assert msg.context["source"] == "codex"
 
 
 @pytest.mark.asyncio
@@ -75,7 +77,7 @@ async def test_post_message_invalid_json(channel, mock_handler):
 
 @pytest.mark.asyncio
 async def test_session_id_without_colon(channel, mock_handler):
-    """Test session_id without colon uses http-bridge as channel."""
+    """Test session_id without colon uses http-bridge as output channel."""
     async with TestClient(TestServer(channel._app)) as client:
         resp = await client.post(
             "/message",
@@ -85,5 +87,7 @@ async def test_session_id_without_colon(channel, mock_handler):
 
         msg = mock_handler.call_args[0][0]
         assert msg.channel == "http-bridge"
+        assert msg.output_channel == "http-bridge"
         assert msg.chat_id == "mysession"
         assert msg.session_id == "mysession"
+        assert msg.context["source"] == "unknown"

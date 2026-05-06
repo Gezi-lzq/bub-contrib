@@ -32,12 +32,20 @@ Default port is `9800`. Override via `BUB_HTTP_BRIDGE_PORT` env var.
 ```json
 {
   "session_id": "<channel>:<chat_id>",
-  "content": "<message>"
+  "content": "<message>",
+  "source": "<caller_identity>"
 }
 ```
 
 - `session_id`: Target session. Format is `channel:chat_id` (e.g. `telegram:5779521985`, `feishu:xxx`).
 - `content`: Message body. Prefix with `,` to execute as a bash command in that session. Plain text triggers normal agent processing.
+- `source` (optional): Identifier of the calling process (e.g. `codex`, `deploy-script`). Defaults to `unknown`. Appears in context as `source=codex` so the agent knows the message is not from a human user.
+
+## How the Agent Sees It
+
+Messages posted via bridge arrive with `channel=$http-bridge` in context, not the target channel. This lets the agent distinguish bridge-injected messages from direct user messages. The `output_channel` is set to the target channel so responses route correctly.
+
+Context example: `channel=$http-bridge|chat_id=5779521985|source=codex`
 
 ## Response
 
@@ -53,7 +61,7 @@ When spawning a subprocess that should report back:
 # Tell the child process how to call back
 export BUB_CALLBACK="curl -s -X POST http://127.0.0.1:9800/message \
   -H 'Content-Type: application/json' \
-  -d '{\"session_id\": \"telegram:5779521985\", \"content\": \"task done: result here\"}'"
+  -d '{\"session_id\": \"telegram:5779521985\", \"content\": \"task done: result here\", \"source\": \"codex\"}'"
 ```
 
 ### Pattern 2: Execute a framework command from outside
@@ -61,7 +69,7 @@ export BUB_CALLBACK="curl -s -X POST http://127.0.0.1:9800/message \
 ```bash
 curl -s -X POST http://127.0.0.1:9800/message \
   -H 'Content-Type: application/json' \
-  -d '{"session_id": "telegram:5779521985", "content": ",echo hello from external"}'
+  -d '{"session_id": "telegram:5779521985", "content": ",echo hello from external", "source": "deploy-script"}'
 ```
 
 ### Pattern 3: Cross-session messaging
@@ -69,7 +77,7 @@ curl -s -X POST http://127.0.0.1:9800/message \
 ```bash
 curl -s -X POST http://127.0.0.1:9800/message \
   -H 'Content-Type: application/json' \
-  -d '{"session_id": "feishu:group123", "content": "deployment complete"}'
+  -d '{"session_id": "feishu:group123", "content": "deployment complete", "source": "ci"}'
 ```
 
 ## Important Notes

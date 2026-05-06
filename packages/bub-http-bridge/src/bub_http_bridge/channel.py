@@ -39,25 +39,27 @@ class HttpBridgeChannel(Channel):
 
         session_id = body.get("session_id")
         content = body.get("content")
+        source = body.get("source", "unknown")
 
         if not session_id or not content:
             return web.json_response(
                 {"error": "session_id and content are required"}, status=400
             )
 
-        # Determine channel and chat_id from session_id
+        # Determine output channel and chat_id from session_id
         if ":" in session_id:
-            channel, chat_id = session_id.split(":", 1)
+            output_channel, chat_id = session_id.split(":", 1)
         else:
-            channel = "http-bridge"
+            output_channel = "http-bridge"
             chat_id = session_id
 
         message = ChannelMessage(
             session_id=session_id,
-            channel=channel,
+            channel="http-bridge",
             chat_id=chat_id,
             content=content,
-            output_channel=channel,
+            output_channel=output_channel,
+            context={"source": source},
         )
 
         await self._on_receive(message)
