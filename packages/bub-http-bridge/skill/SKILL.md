@@ -1,10 +1,10 @@
 ---
 name: http-bridge
 description: >
-  Inject messages into any bub session from external processes.
-  Use when Bub needs to: (1) Give an external process a way to send results back into the current session,
-  (2) Post a message into a different bub session (cross-session messaging),
-  (3) Trigger agent processing or command execution from outside.
+  Deliver messages or control commands (e.g. ,tape.handoff) into a specified bub session.
+  Use when Bub needs to: (1) Inject a message into a specific session from an external process,
+  (2) Send control commands to another session (cross-session), (3) Let a spawned subprocess
+  report results back into the originating session.
 ---
 
 # HTTP Bridge
