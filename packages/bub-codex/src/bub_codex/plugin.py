@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import contextlib
 import json
+import os
 import re
 import time
 from pathlib import Path
@@ -19,7 +20,6 @@ if TYPE_CHECKING:
     from bub.builtin.agent import Agent
 
 THREADS_FILE = ".bub-codex-threads.json"
-HANDOFF_SIGNAL_FILE = ".bub-codex-handoff.json"
 
 _CONTEXT_LENGTH_PATTERNS = re.compile(
     r"context.{0,20}(?:length|window)|maximum.{0,20}context|token.{0,10}limit|prompt.{0,10}too long",
@@ -150,12 +150,18 @@ async def run_model(prompt: str, session_id: str, state: State) -> str:
     command.append(prompt)
 
     start = time.monotonic()
+    env = {
+        **os.environ,
+        "BUB_SESSION_ID": session_id,
+        "BUB_BRIDGE_URL": "http://127.0.0.1:9800",
+    }
     with with_bub_skills(workspace):
         process = await asyncio.create_subprocess_exec(
             *command,
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,
             cwd=str(workspace),
+            env=env,
         )
         stdout, stderr = await process.communicate()
     elapsed_ms = int((time.monotonic() - start) * 1000)
@@ -199,31 +205,3 @@ async def run_model(prompt: str, session_id: str, state: State) -> str:
         }, state)
 
     return "\n".join(output_blocks)
-
-
-@hookimpl
-async def save_state(session_id: str, state: State, message: Any, model_output: str) -> None:
-    workspace = workspace_from_state(state)
-    signal_path = workspace / HANDOFF_SIGNAL_FILE
-    if not signal_path.exists():
-        return
-
-    agent = _runtime_agent_from_state(state)
-    if agent is None:
-        signal_path.unlink(missing_ok=True)
-        return
-
-    try:
-        with signal_path.open() as f:
-            signal = json.load(f)
-    except (json.JSONDecodeError, OSError):
-        signal_path.unlink(missing_ok=True)
-        return
-
-    signal_path.unlink(missing_ok=True)
-
-    tape = agent.tapes.session_tape(session_id, workspace)
-    handoff_name = signal.get("name", "codex-handoff")
-    handoff_state = {k: v for k, v in signal.items() if k != "name" and v}
-    await agent.tapes.handoff(tape.name, name=handoff_name, state=handoff_state)
-    _save_session_data(session_id, {"thread_id": None, "anchor_count": 0}, state)
