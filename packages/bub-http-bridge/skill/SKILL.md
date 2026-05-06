@@ -26,6 +26,15 @@ Content-Type: application/json
 
 Default port is `9800`. Override via `BUB_HTTP_BRIDGE_PORT` env var.
 
+## Obtaining session_id
+
+The `session_id` format is `{channel}:{chat_id}`. Both values are available in the message context:
+
+- `channel` — from context field `channel` (strip the `$` prefix)
+- `chat_id` — from context field `chat_id`
+
+Example: context shows `channel=$telegram|chat_id=5779521985` → session_id is `telegram:5779521985`
+
 ## Request Format
 
 ```json
