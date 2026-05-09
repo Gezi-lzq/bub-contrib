@@ -32,7 +32,7 @@ def edit_message(app_id: str, app_secret: str, message_id: str, text: str) -> di
 def main() -> None:
     parser = argparse.ArgumentParser(description="Edit a Feishu message")
     parser.add_argument("--message-id", "-m", required=True)
-    parser.add_argument("--text", "-t", required=True)
+    parser.add_argument("--text", "-t", required=True, help="New text content (use '-' for stdin)")
     parser.add_argument("--app-id", default=os.environ.get("BUB_FEISHU_APP_ID"))
     parser.add_argument("--app-secret", default=os.environ.get("BUB_FEISHU_APP_SECRET"))
     args = parser.parse_args()
@@ -41,7 +41,15 @@ def main() -> None:
         print("Error: BUB_FEISHU_APP_ID and BUB_FEISHU_APP_SECRET are required")
         sys.exit(1)
 
-    result = edit_message(args.app_id, args.app_secret, args.message_id, args.text)
+    # Read text from stdin or argument
+    from_stdin = args.text == "-"
+    text = sys.stdin.read() if from_stdin else args.text
+
+    # Replace literal \n with real newlines when NOT reading from stdin
+    if not from_stdin:
+        text = text.replace("\\n", "\n")
+
+    result = edit_message(args.app_id, args.app_secret, args.message_id, text)
     if result.get("code") != 0:
         print(f"Error: {result.get('msg')}")
         sys.exit(1)

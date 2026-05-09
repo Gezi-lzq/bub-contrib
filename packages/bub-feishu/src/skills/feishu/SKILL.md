@@ -12,204 +12,208 @@ Assumption: `BUB_FEISHU_APP_ID` and `BUB_FEISHU_APP_SECRET` are already availabl
 
 ## Required Inputs
 
-Collect these fields before execution whenever possible:
-
-- `chat_id`: required for sending a new message or card; obtain it from the current channel/session context, not from the inbound JSON payload
-- `message` / `text` / `content`: required for sending or editing content
+- `chat_id`: required for sending messages (from current channel/session context)
 - `message_id`: required for reply, edit, and reaction actions
-- `reply_to_message.message_id`: optional source reference from inbound metadata; use it only for context, not as a replacement for the current message id
+- `content` / `text`: required for send or edit
+
+## Format Selection Rules
+
+```
+if content has markdown (```, **, lists, code) OR content > 3 lines:
+    use --format card
+elif content is short, plain, conversational:
+    use --format text
+else:
+    use --format auto   (script auto-detects)
+```
+
+- `--format auto`: auto-detects based on content. Uses card if markdown patterns or >3 lines detected; text otherwise.
+- `--format text`: plain text message. Supports `--reply-to`.
+- `--format card`: interactive card with lark_md body. Does NOT support `--reply-to`.
+
+Fallback: if card delivery fails, retry with `--format text`.
+
+## Lark Markdown Supported Syntax (in cards, JSON 2.0)
+
+The card uses JSON 2.0 structure which supports nearly all standard CommonMark syntax plus some HTML.
+
+Supported:
+
+| Syntax | Example |
+|--------|---------|
+| Newline | `\n` or `<br>` |
+| Bold | `**text**` |
+| Italic | `*text*` |
+| Strikethrough | `~~text~~` |
+| Headings | `# H1` through `###### H6` |
+| Blockquotes | `> quoted text` |
+| Links | `[text](url)` |
+| Ordered lists | `1. item` |
+| Unordered lists | `- item` |
+| Code blocks | ` ```lang ... ``` ` |
+| Inline code | `` `code` `` |
+| Tables | `| col | col |` with header separator |
+| Images | `![alt](image_key)` |
+| Divider | `---` or `<hr>` |
+| @mention | `<at id=open_id></at>` |
+| Colored text | `<font color='red'>text</font>` |
+
+NOT supported:
+- HTMLBlock (arbitrary HTML)
+- SetextHeading
 
 ## Execution Policy
 
-1. If handling an active Feishu conversation and `message_id` is known, prefer reply semantics instead of sending an unrelated new message.
-2. If source metadata says sender is a bot (`sender_is_bot=true`), do not assume reply mode is appropriate; prefer a normal message unless there is a clear user-authored message to reply to.
+1. If `message_id` is known, prefer reply semantics.
+2. If `sender_is_bot=true`, prefer a normal message unless a reply target is explicitly required and known to be correct.
 3. Prefer plain text for short, direct, conversational responses.
 4. Prefer cards for Markdown content, status summaries, step lists, and structured updates.
-5. For long-running tasks, send one acknowledgment first, then prefer edits or one follow-up update to close the loop.
-6. For multi-line text passed through shell commands, prefer heredoc command substitution instead of embedding raw line breaks in quoted strings.
-7. Only call scripts when a Feishu-specific platform action is required; otherwise return the final content directly.
-8. When only lightweight acknowledgment is needed, prefer the Feishu message reaction API; if explanation or context is needed, use a normal reply instead.
-9. Do not assume the Feishu channel will send replies automatically; all platform actions must go through the Feishu scripts or direct OpenAPI calls.
-
-
-## Message Format Policy
-
-- Short replies, confirmations, and direct answers: use `feishu_send.py --format text`
-- Markdown content, progress summaries, checklists, and report-like output: use `feishu_send.py --format card`
-- Image messages: use `lark-cli im +messages-send` or `lark-cli im +messages-reply` with `--image`
-- Updates to an existing bot message: use `feishu_edit.py`
-- Lightweight acknowledgment: use the Feishu OpenAPI message reaction endpoint
-
-## Special Message Policy
-
-- Respect the current runtime context prepared by the channel: only act when the current message has already reached the agent.
-- If `sender_is_bot=true`, prefer a normal message unless a reply target is explicitly required and known to be correct.
-- When only lightweight acknowledgment is needed, prefer reactions; once explanation, risk notes, result summaries, or next steps are needed, switch to a normal reply.
-- For reply chains and sequential status updates, prefer staying in the original context; when possible, close the loop by editing, otherwise send a follow-up message.
-- Long-running tasks should follow an acknowledgment → progress → completion / blocked lifecycle so the user is not left without feedback.
-- When blocked, failing, or waiting on an external dependency, send a problem report immediately, including failure point, completed work, impact, and next action.
-- If `message_id` is missing, do not perform reply, edit, or reaction actions; if `chat_id` is missing, do not perform send actions.
-- `feishu_send.py` only supports text and card messages; when an outbound message must include an image, switch to `lark-cli`.
-- Do not put local image paths inside Markdown and expect automatic upload. For local files like `./image.png`, use `lark-cli ... --image ./image.png`.
-- If card delivery is unsuitable or fails, fall back to `feishu_send.py --format text` so the message still reaches the user.
+5. For long-running tasks: send acknowledgment → progress (edit) → completion / blocked lifecycle.
+6. When only lightweight acknowledgment is needed, use a reaction; once explanation or next steps are needed, switch to a normal reply.
+7. When blocked or failing, send a problem report immediately (failure point, completed work, impact, next action).
+8. **Always pass content via stdin (heredoc).** Never embed multi-line text in shell arguments.
+9. Literal `\n` in argument mode is auto-converted to real newlines. Stdin mode passes content as-is.
+10. Only call scripts when a Feishu-specific platform action is required; otherwise return the final content directly.
+11. Do not assume the Feishu channel will send replies automatically; all platform actions must go through the Feishu scripts or direct OpenAPI calls.
+12. Respect the current runtime context: only act when the current message has already reached the agent.
+13. For reply chains and sequential status updates, stay in the original context; close the loop by editing when possible, otherwise send a follow-up.
+14. `feishu_send.py` only supports text and card messages; for images, switch to `lark-cli`.
+15. If card delivery fails, fall back to `--format text` so the message still reaches the user.
 
 ## Runtime Context Mapping
 
-The current Feishu channel message JSON includes:
+The inbound Feishu message JSON includes:
 
 - `message`: normalized text content
 - `message_id`: current user message ID
 - `type`: normalized message type
-- `sender_id`
-- `sender_name`
-- `sender_is_bot`
-- `date`
-- `media`
-- `reply_to_message`
+- `sender_id`, `sender_name`, `sender_is_bot`
+- `date`, `media`
+- `reply_to_message`: optional; use `reply_to_message.message_id` only for context, not as a replacement for the current message_id
 
 Typical mappings:
 
-- Send a new message to the current conversation: use `chat_id` from the current channel/session context
-- Reply to the current user message: use `message_id` as the reply target
-- Edit a previously sent bot message: use the target bot message `message_id`
-- Add a reaction to the current message: use the current message `message_id`
+- Send to current conversation: use `chat_id` from channel/session context
+- Reply to current user message: use `message_id` as reply target
+- Edit a previously sent bot message: use that bot message's `message_id`
+- React to current message: use current `message_id`
 
 ## Command Templates
 
-Paths are relative to this skill directory.
+All paths use `${SKILL_DIR}` which resolves to this skill's directory.
+
+### Send message (stdin — preferred)
 
 ```bash
-# Send text message
-uv run ${SKILL_DIR}/scripts/feishu_send.py \
-  --chat-id <CHAT_ID> \
-  --content "<TEXT>" \
-  --format text
-
-# Send multi-line text message (heredoc)
-uv run ${SKILL_DIR}/scripts/feishu_send.py \
-  --chat-id <CHAT_ID> \
-  --content "$(cat <<'EOF'
+# Auto-detect format
+cat << 'EOF' | uv run ${SKILL_DIR}/scripts/feishu_send.py --chat-id <CHAT_ID> --content - --format auto
 Build finished successfully.
 Summary:
 - 12 tests passed
 - 0 failures
 EOF
-)" \
-  --format text
 
-# Reply to a specific message
-uv run ${SKILL_DIR}/scripts/feishu_send.py \
-  --chat-id <CHAT_ID> \
-  --content "<TEXT>" \
-  --format text \
-  --reply-to <MESSAGE_ID>
+# Explicit text format
+cat << 'EOF' | uv run ${SKILL_DIR}/scripts/feishu_send.py --chat-id <CHAT_ID> --content - --format text
+Short reply here.
+EOF
 
-# Send card update
-uv run ${SKILL_DIR}/scripts/feishu_send.py \
-  --chat-id <CHAT_ID> \
-  --content "<MARKDOWN_CONTENT>" \
-  --format card \
-  --title "<TITLE>"
+# Card with title
+cat << 'EOF' | uv run ${SKILL_DIR}/scripts/feishu_send.py --chat-id <CHAT_ID> --content - --format card --title "Deploy Status"
+**Status:** Complete
+- Service A: ✅
+- Service B: ✅
+EOF
+```
 
-# Edit an existing bot message
-uv run ${SKILL_DIR}/scripts/feishu_edit.py \
-  --message-id <MESSAGE_ID> \
-  --text "<TEXT>"
+### Reply to a message
+
+```bash
+cat << 'EOF' | uv run ${SKILL_DIR}/scripts/feishu_send.py --chat-id <CHAT_ID> --content - --format text --reply-to <MESSAGE_ID>
+Got it, working on it now.
+EOF
+```
+
+### Edit an existing message
+
+```bash
+cat << 'EOF' | uv run ${SKILL_DIR}/scripts/feishu_edit.py --message-id <MESSAGE_ID> --text -
+Updated content here.
+EOF
+```
+
+### Short inline (simple cases only)
+
+```bash
+# Literal \n is converted to real newlines automatically in argument mode
+uv run ${SKILL_DIR}/scripts/feishu_send.py --chat-id <CHAT_ID> --content "Line 1\nLine 2" --format text
 ```
 
 ## Sending Images via `lark-cli`
 
-Use `lark-cli` only when the message must contain an image. The packaged `feishu_send.py` script does not upload media.
+`feishu_send.py` does not handle images. Use `lark-cli` instead.
 
 Prerequisites:
-
-- `lark-cli` is installed, typically via `npm install -g @larksuite/cli`
-- App config is initialized with `lark-cli config init`
-- For bot identity, the app has the required IM scopes and has already been added to the target chat
-- For user identity, `lark-cli auth login` has already granted the required user scopes
-
-Rules:
-
-- New image message to a chat: use `lark-cli im +messages-send --chat-id <CHAT_ID> --image <PATH_OR_IMAGE_KEY>`
-- Reply with an image: use `lark-cli im +messages-reply --message-id <MESSAGE_ID> --image <PATH_OR_IMAGE_KEY>`
-- `--image` accepts either a local file path like `./photo.png` or an existing `image_key` like `img_v3_...`
-- When `--image` is a local file path, `lark-cli` uploads it automatically before sending
-- If you need a dry run first, add `--dry-run`
-
-Examples:
+- `lark-cli` installed (`npm install -g @larksuite/cli`)
+- App config initialized (`lark-cli config init`)
+- Bot has required IM scopes and is added to target chat
 
 ```bash
-# Send a new image message to the current chat as bot
-lark-cli im +messages-send \
-  --chat-id <CHAT_ID> \
-  --image ./photo.png \
-  --as bot
+# Send image to chat
+lark-cli im +messages-send --chat-id <CHAT_ID> --image ./photo.png --as bot
 
-# Reply to the current message with a local image
-lark-cli im +messages-reply \
-  --message-id <MESSAGE_ID> \
-  --image ./photo.png \
-  --as bot
+# Reply with image
+lark-cli im +messages-reply --message-id <MESSAGE_ID> --image ./photo.png --as bot
 
-# Send an already uploaded image by image_key
-lark-cli im +messages-send \
-  --chat-id <CHAT_ID> \
-  --image img_v3_abc123 \
-  --as bot
-
-# Preview the request without executing it
-lark-cli im +messages-send \
-  --chat-id <CHAT_ID> \
-  --image ./photo.png \
-  --as bot \
-  --dry-run
+# Send by image_key
+lark-cli im +messages-send --chat-id <CHAT_ID> --image img_v3_abc123 --as bot
 ```
 
-Identity notes:
-
-- Prefer `--as bot` for image sends in this skill because the rest of this skill already assumes app credentials and bot-style outbound actions
-- `--as user` is supported by `lark-cli`, but local media upload is still performed with bot identity first, and the final send uses user identity
-- If `--as user` is required, make sure the user identity already has `im:message.send_as_user` and `im:message`
-
-For actions not covered by the packaged scripts, such as reactions, call the Feishu OpenAPI directly.
+Notes:
+- `--image` accepts local file path or existing `image_key`
+- Local files are uploaded automatically before sending
+- Prefer `--as bot` (this skill assumes bot identity)
+- Do not put local file paths in Markdown and expect upload. Use `--image` flag.
 
 ## Script Interface Reference
 
 ### `feishu_send.py`
 
-- `--chat-id`, `-c`: required
-- `--content`, `-m`: required
-- `--format`: optional, `text` or `card`, defaults to `text`
-- `--title`, `-t`: used only with `--format card`
-- `--reply-to`, `-r`: valid only with `--format text`
-- `--app-id`: optional
-- `--app-secret`: optional
+| Arg | Required | Notes |
+|-----|----------|-------|
+| `--chat-id`, `-c` | yes | Target chat |
+| `--content`, `-m` | yes | Use `-` for stdin |
+| `--format` | no | `text` (default), `card`, or `auto` |
+| `--title`, `-t` | no | Card title (only with `--format card`) |
+| `--reply-to`, `-r` | no | Only with `--format text` |
+| `--app-id` | no | Env fallback: `BUB_FEISHU_APP_ID` |
+| `--app-secret` | no | Env fallback: `BUB_FEISHU_APP_SECRET` |
 
 ### `feishu_edit.py`
 
-- `--message-id`, `-m`: required
-- `--text`, `-t`: required
-- `--app-id`: optional
-- `--app-secret`: optional
-
-## API Docs
-
-- Feishu OpenAPI docs: `https://open.feishu.cn/document/`
-- Lark OpenAPI docs: `https://open.larksuite.com/document/`
-- For IM APIs, see the official `IM` / `Message` documentation
-- Common endpoints:
-  - `POST /open-apis/im/v1/messages`
-  - `POST /open-apis/im/v1/messages/{message_id}/reply`
-  - `PATCH /open-apis/im/v1/messages/{message_id}`
-  - `POST /open-apis/im/v1/messages/{message_id}/reactions`
+| Arg | Required | Notes |
+|-----|----------|-------|
+| `--message-id`, `-m` | yes | Message to edit |
+| `--text`, `-t` | yes | Use `-` for stdin |
+| `--app-id` | no | Env fallback: `BUB_FEISHU_APP_ID` |
+| `--app-secret` | no | Env fallback: `BUB_FEISHU_APP_SECRET` |
 
 ## Failure Handling
 
-- If text or card sending fails, first check `chat_id`, message format, application permissions, and credentials.
-- If card sending fails, fall back to `feishu_send.py --format text`.
-- If reply sending fails, fall back to sending a normal message to the same `chat_id`.
-- If editing fails, fall back to sending a new message and state that it is the updated result.
-- If a reaction fails, fall back to a short text acknowledgment.
-- If `message_id` is missing, do not perform reply, edit, or reaction actions.
-- If `chat_id` is missing, do not perform send actions.
-- If the task itself fails, do not report only the API error; also tell the user what failed, what was completed, the impact, and the next action.
+- Card fails → fall back to `--format text`
+- Reply fails → fall back to normal send to same `chat_id`
+- Edit fails → send new message stating it's the updated result
+- Reaction fails → send short text acknowledgment
+- Missing `message_id` → skip reply/edit/reaction
+- Missing `chat_id` → skip send
+- Task failure → don't just report the API error; tell the user what failed, what was completed, the impact, and the next action
+
+## API Reference
+
+- Feishu: `https://open.feishu.cn/document/`
+- Lark: `https://open.larksuite.com/document/`
+- Key endpoints:
+  - `POST /open-apis/im/v1/messages` (send)
+  - `POST /open-apis/im/v1/messages/{message_id}/reply` (reply)
+  - `PATCH /open-apis/im/v1/messages/{message_id}` (edit)
+  - `POST /open-apis/im/v1/messages/{message_id}/reactions` (react)
