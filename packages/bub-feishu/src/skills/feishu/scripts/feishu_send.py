@@ -51,7 +51,7 @@ def send_card_message(
     card = {
         "config": {"wide_screen_mode": True},
         "header": {"title": {"tag": "plain_text", "content": title}},
-        "elements": [{"tag": "div", "text": {"tag": "lark_md", "content": content}}],
+        "elements": [{"tag": "markdown", "content": content}],
     }
     return request_json(
         "POST",
