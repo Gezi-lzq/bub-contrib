@@ -9,10 +9,35 @@
 import argparse
 import json
 import os
+import re
 import sys
 from typing import Any
 
 from feishu_utils import get_tenant_access_token, request_json
+
+
+def detect_format(content: str) -> str:
+    """Auto-detect whether content should be sent as card or text.
+
+    Returns 'card' if content contains markdown-like syntax or is multi-line (>3 lines).
+    Returns 'text' otherwise.
+    """
+    lines = content.strip().split("\n")
+    if len(lines) > 3:
+        return "card"
+
+    markdown_patterns = [
+        r"```",          # code blocks
+        r"\*\*.+\*\*",  # bold
+        r"^#{1,3}\s",   # headings
+        r"^[-*]\s",     # unordered list items
+        r"^\d+\.\s",    # ordered list items
+    ]
+    for pattern in markdown_patterns:
+        if re.search(pattern, content, re.MULTILINE):
+            return "card"
+
+    return "text"
 
 
 def send_text_message(
@@ -51,7 +76,7 @@ def send_card_message(
     card = {
         "config": {"wide_screen_mode": True},
         "header": {"title": {"tag": "plain_text", "content": title}},
-        "elements": [{"tag": "markdown", "content": content}],
+        "elements": [{"tag": "div", "text": {"tag": "lark_md", "content": content}}],
     }
     return request_json(
         "POST",
@@ -92,12 +117,12 @@ def send_message(
 def main() -> None:
     parser = argparse.ArgumentParser(description="Send a Feishu text or card message")
     parser.add_argument("--chat-id", "-c", required=True, help="Target chat ID")
-    parser.add_argument("--content", "-m", required=True, help="Content to send")
+    parser.add_argument("--content", "-m", required=True, help="Content to send (use '-' for stdin)")
     parser.add_argument(
         "--format",
-        choices=("text", "card"),
+        choices=("text", "card", "auto"),
         default="text",
-        help="Message format to send",
+        help="Message format: text, card, or auto (auto-detect based on content)",
     )
     parser.add_argument("--title", "-t", help="Card title when --format card is used")
     parser.add_argument(
@@ -111,25 +136,36 @@ def main() -> None:
         print("Error: BUB_FEISHU_APP_ID and BUB_FEISHU_APP_SECRET are required")
         sys.exit(1)
 
-    if args.format == "card" and args.reply_to:
+    # Read content from stdin or argument
+    from_stdin = args.content == "-"
+    content = sys.stdin.read() if from_stdin else args.content
+
+    # Replace literal \n with real newlines when NOT reading from stdin
+    if not from_stdin:
+        content = content.replace("\\n", "\n")
+
+    # Resolve auto format
+    message_format = args.format
+    if message_format == "auto":
+        message_format = detect_format(content)
+
+    if message_format == "card" and args.reply_to:
         print("Error: --reply-to is only supported when --format text is used")
         sys.exit(1)
-
-    content = sys.stdin.read() if args.content == "-" else args.content
 
     result = send_message(
         args.app_id,
         args.app_secret,
         args.chat_id,
         content,
-        message_format=args.format,
+        message_format=message_format,
         title=args.title,
         reply_to_message_id=args.reply_to,
     )
     if result.get("code") != 0:
         print(f"Error: {result.get('msg')}")
         sys.exit(1)
-    print(f"{args.format.capitalize()} message sent to {args.chat_id}")
+    print(f"{message_format.capitalize()} message sent to {args.chat_id}")
 
 
 if __name__ == "__main__":
