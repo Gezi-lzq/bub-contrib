@@ -65,14 +65,20 @@ NOT supported:
 ## Execution Policy
 
 1. If `message_id` is known, prefer reply semantics.
-2. If `sender_is_bot=true`, prefer a normal message (not reply).
-3. For long-running tasks: send acknowledgment → progress (edit) → completion.
-4. When only lightweight acknowledgment is needed, use a reaction instead of a message.
-5. When blocked or failing, send a problem report immediately.
-6. **Always pass content via stdin (heredoc).** Never embed multi-line text in shell arguments.
-7. Literal `\n` in argument mode is auto-converted to real newlines. Stdin mode passes content as-is.
-8. Only call scripts when a Feishu-specific platform action is required; otherwise return the final content directly.
-9. Do not assume the Feishu channel will send replies automatically; all platform actions must go through the Feishu scripts or direct OpenAPI calls.
+2. If `sender_is_bot=true`, prefer a normal message unless a reply target is explicitly required and known to be correct.
+3. Prefer plain text for short, direct, conversational responses.
+4. Prefer cards for Markdown content, status summaries, step lists, and structured updates.
+5. For long-running tasks: send acknowledgment → progress (edit) → completion / blocked lifecycle.
+6. When only lightweight acknowledgment is needed, use a reaction; once explanation or next steps are needed, switch to a normal reply.
+7. When blocked or failing, send a problem report immediately (failure point, completed work, impact, next action).
+8. **Always pass content via stdin (heredoc).** Never embed multi-line text in shell arguments.
+9. Literal `\n` in argument mode is auto-converted to real newlines. Stdin mode passes content as-is.
+10. Only call scripts when a Feishu-specific platform action is required; otherwise return the final content directly.
+11. Do not assume the Feishu channel will send replies automatically; all platform actions must go through the Feishu scripts or direct OpenAPI calls.
+12. Respect the current runtime context: only act when the current message has already reached the agent.
+13. For reply chains and sequential status updates, stay in the original context; close the loop by editing when possible, otherwise send a follow-up.
+14. `feishu_send.py` only supports text and card messages; for images, switch to `lark-cli`.
+15. If card delivery fails, fall back to `--format text` so the message still reaches the user.
 
 ## Runtime Context Mapping
 
