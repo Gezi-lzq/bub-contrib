@@ -71,6 +71,26 @@ NOT supported:
 5. When blocked or failing, send a problem report immediately.
 6. **Always pass content via stdin (heredoc).** Never embed multi-line text in shell arguments.
 7. Literal `\n` in argument mode is auto-converted to real newlines. Stdin mode passes content as-is.
+8. Only call scripts when a Feishu-specific platform action is required; otherwise return the final content directly.
+9. Do not assume the Feishu channel will send replies automatically; all platform actions must go through the Feishu scripts or direct OpenAPI calls.
+
+## Runtime Context Mapping
+
+The inbound Feishu message JSON includes:
+
+- `message`: normalized text content
+- `message_id`: current user message ID
+- `type`: normalized message type
+- `sender_id`, `sender_name`, `sender_is_bot`
+- `date`, `media`
+- `reply_to_message`: optional; use `reply_to_message.message_id` only for context, not as a replacement for the current message_id
+
+Typical mappings:
+
+- Send to current conversation: use `chat_id` from channel/session context
+- Reply to current user message: use `message_id` as reply target
+- Edit a previously sent bot message: use that bot message's `message_id`
+- React to current message: use current `message_id`
 
 ## Command Templates
 
@@ -125,7 +145,12 @@ uv run ${SKILL_DIR}/scripts/feishu_send.py --chat-id <CHAT_ID> --content "Line 1
 
 ## Sending Images via `lark-cli`
 
-`feishu_send.py` does not handle images. Use `lark-cli` instead:
+`feishu_send.py` does not handle images. Use `lark-cli` instead.
+
+Prerequisites:
+- `lark-cli` installed (`npm install -g @larksuite/cli`)
+- App config initialized (`lark-cli config init`)
+- Bot has required IM scopes and is added to target chat
 
 ```bash
 # Send image to chat
@@ -138,7 +163,11 @@ lark-cli im +messages-reply --message-id <MESSAGE_ID> --image ./photo.png --as b
 lark-cli im +messages-send --chat-id <CHAT_ID> --image img_v3_abc123 --as bot
 ```
 
-Do not put local file paths in Markdown and expect upload. Use `--image` flag.
+Notes:
+- `--image` accepts local file path or existing `image_key`
+- Local files are uploaded automatically before sending
+- Prefer `--as bot` (this skill assumes bot identity)
+- Do not put local file paths in Markdown and expect upload. Use `--image` flag.
 
 ## Script Interface Reference
 
@@ -171,6 +200,7 @@ Do not put local file paths in Markdown and expect upload. Use `--image` flag.
 - Reaction fails → send short text acknowledgment
 - Missing `message_id` → skip reply/edit/reaction
 - Missing `chat_id` → skip send
+- Task failure → don't just report the API error; tell the user what failed, what was completed, the impact, and the next action
 
 ## API Reference
 
