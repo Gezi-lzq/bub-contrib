@@ -115,11 +115,13 @@ def main() -> None:
         print("Error: --reply-to is only supported when --format text is used")
         sys.exit(1)
 
+    content = sys.stdin.read() if args.content == "-" else args.content
+
     result = send_message(
         args.app_id,
         args.app_secret,
         args.chat_id,
-        args.content,
+        content,
         message_format=args.format,
         title=args.title,
         reply_to_message_id=args.reply_to,

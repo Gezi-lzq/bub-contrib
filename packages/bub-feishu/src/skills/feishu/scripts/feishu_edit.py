@@ -41,7 +41,9 @@ def main() -> None:
         print("Error: BUB_FEISHU_APP_ID and BUB_FEISHU_APP_SECRET are required")
         sys.exit(1)
 
-    result = edit_message(args.app_id, args.app_secret, args.message_id, args.text)
+    text = sys.stdin.read() if args.text == "-" else args.text
+
+    result = edit_message(args.app_id, args.app_secret, args.message_id, text)
     if result.get("code") != 0:
         print(f"Error: {result.get('msg')}")
         sys.exit(1)
