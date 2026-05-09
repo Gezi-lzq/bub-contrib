@@ -33,32 +33,34 @@ else:
 
 Fallback: if card delivery fails, retry with `--format text`.
 
-## Lark Markdown Supported Syntax (in cards)
+## Lark Markdown Supported Syntax (in cards, JSON 2.0)
 
-Supported in `lark_md` (card elements):
+The card uses JSON 2.0 structure which supports nearly all standard CommonMark syntax plus some HTML.
+
+Supported:
 
 | Syntax | Example |
 |--------|---------|
-| Newline | `\n` |
+| Newline | `\n` or `<br>` |
 | Bold | `**text**` |
 | Italic | `*text*` |
 | Strikethrough | `~~text~~` |
+| Headings | `# H1` through `###### H6` |
+| Blockquotes | `> quoted text` |
 | Links | `[text](url)` |
-| Ordered lists | `1. item` (Feishu 7.6+) |
-| Unordered lists | `- item` (Feishu 7.6+) |
-| Code blocks | ` ```code``` ` (Feishu 7.6+) |
+| Ordered lists | `1. item` |
+| Unordered lists | `- item` |
+| Code blocks | ` ```lang ... ``` ` |
+| Inline code | `` `code` `` |
+| Tables | `| col | col |` with header separator |
 | Images | `![alt](image_key)` |
-| Divider | `\n ---\n` |
+| Divider | `---` or `<hr>` |
 | @mention | `<at id=open_id></at>` |
 | Colored text | `<font color='red'>text</font>` |
 
-NOT supported in `lark_md`:
-
-- Headings (`#`, `##`, `###`) → use `**bold**` instead
-- Blockquotes (`>`)
-- Tables
-
-Note: text element `lark_md` mode (non-card) is more limited — no images, dividers, lists, or code blocks.
+NOT supported:
+- HTMLBlock (arbitrary HTML)
+- SetextHeading
 
 ## Execution Policy
 

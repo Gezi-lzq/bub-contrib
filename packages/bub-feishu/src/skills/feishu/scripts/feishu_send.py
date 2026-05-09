@@ -74,9 +74,11 @@ def send_card_message(
 ) -> dict[str, Any]:
     token = get_tenant_access_token(app_id, app_secret)
     card = {
-        "config": {"wide_screen_mode": True},
+        "schema": "2.0",
         "header": {"title": {"tag": "plain_text", "content": title}},
-        "elements": [{"tag": "div", "text": {"tag": "lark_md", "content": content}}],
+        "body": {
+            "elements": [{"tag": "markdown", "content": content}]
+        },
     }
     return request_json(
         "POST",
