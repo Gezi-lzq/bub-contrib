@@ -8,7 +8,8 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any, cast
 
 from bub import hookimpl
-from bub.types import State
+from bub.turn_admission import AdmitDecision, AdmitAction, TurnSnapshot
+from bub.types import Envelope, State
 from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
@@ -192,3 +193,10 @@ from collections.abc import AsyncGenerator
 @contextlib.asynccontextmanager
 async def _noop_context() -> AsyncGenerator[None, None]:
     yield
+
+@hookimpl
+def admit_message(session_id: str, message: Envelope, turn: TurnSnapshot) -> AdmitDecision | None:
+    """Queue new messages while codex is running, instead of concurrent processing."""
+    if turn.is_running:
+        return AdmitDecision(action=AdmitAction.WAIT, reason="codex turn in progress")
+    return None
