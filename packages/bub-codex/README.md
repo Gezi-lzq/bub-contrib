@@ -24,16 +24,23 @@ bub install bub-codex@main
 
 ## Prerequisites
 
-- Make `openai-codex` importable in the Bub runtime, for example with
-  `pip install openai-codex`. Published SDK builds include their pinned local
-  Codex runtime.
+- Install the SDK extra with prereleases enabled:
+
+  ```bash
+  uv pip install --prerelease=allow "bub-codex[sdk]"
+  ```
+
+  The extra pins `openai-codex==0.1.0b3`, which resolves to
+  `openai-codex-cli-bin==0.137.0a4`. This is currently the first tested SDK
+  release in this spike that installs on Linux x86_64 glibc environments.
 - Codex should be authenticated before runtime.
 
-Note: the spike does not add `openai-codex` to package dependencies yet because
-the current SDK release observed during development depends on a pinned runtime
-wheel that is not published for this glibc Linux test environment. The plugin's
-normal backend path still imports and uses `openai-codex`; there is no `codex e`
-subprocess fallback.
+Package note: `openai-codex<=0.1.0b2` depends on
+`openai-codex-cli-bin==0.132.0`, whose published wheels do not include this
+Linux x86_64 glibc platform. `openai-codex==0.1.0b3` depends on the prerelease
+runtime `openai-codex-cli-bin==0.137.0a4`, so installers must allow prereleases.
+The plugin's normal backend path imports and uses `openai-codex`; there is no
+`codex e` subprocess fallback.
 
 ## Configuration
 

@@ -9,6 +9,11 @@ authors = [
 requires-python = ">=3.12"
 dependencies = []
 
+[project.optional-dependencies]
+sdk = [
+    "openai-codex==0.1.0b3",
+]
+
 [project.entry-points.bub]
 codex = "bub_codex.plugin"
 
