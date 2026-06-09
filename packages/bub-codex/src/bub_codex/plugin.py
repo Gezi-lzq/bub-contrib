@@ -98,6 +98,32 @@ async def _maybe_await(value: Any) -> Any:
     return value
 
 
+def _signature_supported_kwargs(
+    callable_obj: Any, kwargs: dict[str, Any]
+) -> dict[str, Any]:
+    if not kwargs:
+        return kwargs
+    try:
+        signature = inspect.signature(callable_obj)
+    except (TypeError, ValueError):
+        return kwargs
+    params = signature.parameters.values()
+    if any(param.kind is inspect.Parameter.VAR_KEYWORD for param in params):
+        return kwargs
+    supported = {
+        param.name
+        for param in params
+        if param.kind
+        in (inspect.Parameter.POSITIONAL_OR_KEYWORD, inspect.Parameter.KEYWORD_ONLY)
+    }
+    return {name: value for name, value in kwargs.items() if name in supported}
+
+
+def _type_error_rejects_kwarg(exc: TypeError, name: str) -> bool:
+    message = str(exc)
+    return name in message and "keyword" in message
+
+
 async def _call_first(
     obj: Any, names: tuple[str, ...], *args: Any, **kwargs: Any
 ) -> Any:
@@ -106,12 +132,15 @@ async def _call_first(
         method = getattr(obj, name, None)
         if not callable(method):
             continue
+        call_kwargs = _signature_supported_kwargs(method, kwargs)
         try:
-            return await _maybe_await(method(*args, **kwargs))
+            return await _maybe_await(method(*args, **call_kwargs))
         except TypeError as exc:
             last_type_error = exc
-            if kwargs:
-                return await _maybe_await(method(*args))
+            if "timeout" in call_kwargs and _type_error_rejects_kwarg(exc, "timeout"):
+                retry_kwargs = dict(call_kwargs)
+                retry_kwargs.pop("timeout")
+                return await _maybe_await(method(*args, **retry_kwargs))
             raise
     if last_type_error is not None:
         raise last_type_error

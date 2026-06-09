@@ -208,6 +208,53 @@ def test_sdk_backend_accepts_enum_like_completed_status(tmp_path: Path) -> None:
     assert result.final_response == "ok"
 
 
+def test_sdk_backend_preserves_cwd_when_timeout_kwarg_is_rejected(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    monkeypatch.setattr(
+        plugin,
+        "_settings",
+        lambda: SimpleNamespace(
+            model=None,
+            yolo_mode=False,
+            timeout_seconds=120.0,
+            resume_threads=True,
+        ),
+    )
+
+    class RejectsTimeoutThread:
+        id = "thread-timeout"
+
+        def __init__(self) -> None:
+            self.attempts: list[tuple[str, dict[str, object]]] = []
+
+        async def run(self, prompt: str, **kwargs: object) -> object:
+            self.attempts.append((prompt, kwargs))
+            if "timeout" in kwargs:
+                raise TypeError(
+                    "AsyncThread.run() got an unexpected keyword argument 'timeout'"
+                )
+            return SimpleNamespace(
+                final_response="ok",
+                thread_id="thread-timeout",
+                turn_id="turn-timeout",
+                status="completed",
+            )
+
+    thread = RejectsTimeoutThread()
+    backend = plugin.CodexSdkBackend(FakeSdkFactory(FakeCodex(thread)))
+
+    result = asyncio.run(
+        backend.run("ok", workspace=tmp_path, thread_id=None, state={})
+    )
+
+    assert result.final_response == "ok"
+    assert thread.attempts == [
+        ("ok", {"cwd": str(tmp_path), "timeout": 120.0}),
+        ("ok", {"cwd": str(tmp_path)}),
+    ]
+
+
 class FakeTapes:
     def __init__(self) -> None:
         self.anchor_entries = [
