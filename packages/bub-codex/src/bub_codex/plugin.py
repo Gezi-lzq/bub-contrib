@@ -169,7 +169,18 @@ def _result_text(result: Any, streamed_text: str) -> str:
 
 def _result_status(result: Any) -> str:
     status = _object_field(result, "status", "state")
-    return str(status or "completed")
+    if status is None:
+        return "completed"
+    value = getattr(status, "value", None)
+    if value is not None:
+        return str(value)
+    name = getattr(status, "name", None)
+    if name is not None:
+        return str(name).lower()
+    text = str(status)
+    if "." in text:
+        return text.rsplit(".", 1)[-1].lower()
+    return text
 
 
 def _result_thread_id(result: Any, thread: Any) -> str | None:

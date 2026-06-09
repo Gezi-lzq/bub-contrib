@@ -180,6 +180,34 @@ def test_sdk_backend_raises_on_failed_turn(tmp_path: Path) -> None:
         asyncio.run(backend.run("fail", workspace=tmp_path, thread_id=None, state={}))
 
 
+def test_sdk_backend_accepts_enum_like_completed_status(tmp_path: Path) -> None:
+    class CompletedStatus:
+        name = "completed"
+
+        def __str__(self) -> str:
+            return "TurnStatus.completed"
+
+    class CompletedThread:
+        id = "thread-completed"
+
+        async def run(self, prompt: str, **kwargs: object) -> object:
+            return SimpleNamespace(
+                final_response="ok",
+                thread_id="thread-completed",
+                turn_id="turn-completed",
+                status=CompletedStatus(),
+            )
+
+    backend = plugin.CodexSdkBackend(FakeSdkFactory(FakeCodex(CompletedThread())))
+
+    result = asyncio.run(
+        backend.run("ok", workspace=tmp_path, thread_id=None, state={})
+    )
+
+    assert result.status == "completed"
+    assert result.final_response == "ok"
+
+
 class FakeTapes:
     def __init__(self) -> None:
         self.anchor_entries = [
